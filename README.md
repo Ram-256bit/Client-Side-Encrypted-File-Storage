@@ -4,7 +4,8 @@
 Download and install **Node.js** from nodejs.org (https://nodejs.org/dist/v24.12.0/node-v24.12.0-x64.msi).
 
 ### 1. Download the code
-Download the code (https://github.com/Ram-256bit/Client-Side-Encrypted-File-Storage/archive/refs/heads/main.zip)
+- Download the code (https://github.com/Ram-256bit/Client-Side-Encrypted-File-Storage/archive/refs/heads/main.zip)
+- Extract the zip file to a folder.
 
 ### 2. Setup & Run Server
 Open your terminal in the project folder:
@@ -12,7 +13,9 @@ Open your terminal in the project folder:
 ```bash
 # Install dependencies (first time only)
 npm install
+```
 
+```bash
 # Start the server
 node server.js
 ```

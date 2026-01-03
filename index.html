@@ -3,24 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NodeJS Secure Storage</title>
+    <title>Secure Storage</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; background: #eef2f5; }
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; background: #eef2f5; }
         .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h2 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        
-        .section { margin-bottom: 2rem; }
-        label { font-weight: bold; display: block; margin-top: 10px; }
-        
-        input[type="file"], input[type="password"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;}
-        
-        button { width: 100%; background: #3498db; color: white; border: none; padding: 12px; margin-top: 15px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.3s; }
+        input, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
+        button { background: #3498db; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:hover { background: #2980b9; }
-        
-        .file-item { background: #f8f9fa; border-left: 5px solid #2ecc71; padding: 15px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; }
-        .file-item button { width: auto; margin: 0; padding: 8px 15px; font-size: 14px; background: #2ecc71; }
-        
-        #status { margin-top: 10px; font-weight: bold; color: #27ae60; text-align: center; }
+        .file-item { background: #f8f9fa; border-left: 5px solid #2ecc71; padding: 15px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .btn-group button { width: auto; margin-left: 5px; font-size: 0.8rem; }
+        .magic-box { background: #fff3cd; border: 1px solid #ffeeba; padding: 20px; text-align: center; display: none; }
     </style>
 </head>
 <body>
@@ -28,28 +21,56 @@
 <div class="container">
     <h2>Secure Multimedia Storage</h2>
     
-    <div class="section">
-        <h3>1. Encrypt & Upload</h3>
-        <label>Select File:</label>
-        <input type="file" id="fileInput">
-        
-        <label>Set Secret Password:</label>
-        <input type="password" id="password" placeholder="e.g., mySecretKey123">
-        
-        <button onclick="uploadFile()">Encrypt & Upload to Node Server</button>
-        <p id="status"></p>
+    <div id="magicView" class="magic-box">
+        <h3>🔒 Protected File Shared With You</h3>
+        <p id="magicFileName">Loading...</p>
+        <input type="password" id="magicPassword" placeholder="Enter Sender's Password">
+        <button onclick="decryptMagicFile()">Decrypt & Download</button>
+        <br><br>
+        <a href="/">Go to Dashboard</a>
     </div>
 
-    <div class="section">
-        <h3>2. Cloud Files (Encrypted)</h3>
-        <div id="fileList">Connecting to server...</div>
+    <div id="dashboardView">
+        <h3>1. Encrypt & Upload</h3>
+        <input type="file" id="fileInput">
+        <input type="password" id="password" placeholder="Set Secret Password">
+        <button onclick="uploadFile()">Encrypt & Upload</button>
+        <p id="status"></p>
+
+        <h3>2. Cloud Files</h3>
+        <div id="fileList">Loading...</div>
     </div>
 </div>
 
 <script>
     const SERVER_URL = "http://localhost:3000";
+    let magicFileMeta = null;
 
-    // --- CRYPTO HELPER (AES-GCM) ---
+    // --- INIT: CHECK FOR MAGIC LINK ---
+    window.onload = async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileId = urlParams.get('id');
+
+        if (fileId) {
+            // MAGIC LINK MODE
+            document.getElementById('dashboardView').style.display = 'none';
+            document.getElementById('magicView').style.display = 'block';
+            
+            try {
+                const res = await fetch(`${SERVER_URL}/api/file/${fileId}`);
+                if (!res.ok) throw new Error("File not found");
+                magicFileMeta = await res.json();
+                document.getElementById('magicFileName').innerText = `File: ${magicFileMeta.originalName}`;
+            } catch (e) {
+                document.getElementById('magicFileName').innerText = "Error: Invalid Link or File Removed.";
+            }
+        } else {
+            // NORMAL MODE
+            loadFiles();
+        }
+    };
+
+    // --- CRYPTO HELPER ---
     async function getCryptoKey(password, salt) {
         const enc = new TextEncoder();
         const keyMaterial = await window.crypto.subtle.importKey(
@@ -61,108 +82,89 @@
         );
     }
 
-    // --- UPLOAD LOGIC ---
+    // --- UPLOAD ---
     async function uploadFile() {
         const fileInput = document.getElementById('fileInput');
         const password = document.getElementById('password').value;
-        const status = document.getElementById('status');
+        if (!fileInput.files[0] || !password) return alert("Missing details");
 
-        if (!fileInput.files[0] || !password) return alert("Please select a file and enter a password.");
+        const file = fileInput.files[0];
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const key = await getCryptoKey(password, salt);
+        const encryptedData = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, await file.arrayBuffer());
 
-        status.innerText = "Encrypting locally...";
-        
-        try {
-            const file = fileInput.files[0];
-            
-            // 1. Generate Salt & IV
-            const salt = window.crypto.getRandomValues(new Uint8Array(16));
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const formData = new FormData();
+        formData.append("file", new Blob([encryptedData]), file.name + ".enc");
+        formData.append("iv", JSON.stringify(Array.from(iv)));
+        formData.append("salt", JSON.stringify(Array.from(salt)));
 
-            // 2. Encrypt
-            const key = await getCryptoKey(password, salt);
-            const fileBuffer = await file.arrayBuffer();
-            const encryptedData = await window.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv }, key, fileBuffer
-            );
-
-            // 3. Prepare Upload
-            const encryptedBlob = new Blob([encryptedData]);
-            const formData = new FormData();
-            formData.append("file", encryptedBlob, file.name + ".enc"); // Append .enc
-            formData.append("iv", JSON.stringify(Array.from(iv)));
-            formData.append("salt", JSON.stringify(Array.from(salt)));
-
-            // 4. Send to Node Server
-            status.innerText = "Uploading...";
-            const res = await fetch(`${SERVER_URL}/upload`, {
-                method: "POST",
-                body: formData
-            });
-
-            const result = await res.json();
-            status.innerText = result.message || "Done!";
-            loadFiles(); // Refresh list
-
-        } catch (err) {
-            console.error(err);
-            status.innerText = "Error: " + err.message;
-        }
+        await fetch(`${SERVER_URL}/upload`, { method: "POST", body: formData });
+        alert("Uploaded!");
+        loadFiles();
     }
 
-    // --- DOWNLOAD LOGIC ---
+    // --- LOAD FILES ---
     async function loadFiles() {
+        const res = await fetch(`${SERVER_URL}/files`);
+        const files = await res.json();
         const listDiv = document.getElementById('fileList');
-        try {
-            const res = await fetch(`${SERVER_URL}/files`);
-            const files = await res.json();
-            
-            listDiv.innerHTML = "";
-            files.forEach(file => {
-                const div = document.createElement('div');
-                div.className = "file-item";
-                div.innerHTML = `
-                    <span>${file.originalName}</span>
-                    <button onclick='decryptFile(${JSON.stringify(file)})'>Decrypt</button>
-                `;
-                listDiv.appendChild(div);
-            });
-            if(files.length === 0) listDiv.innerText = "No files found.";
-        } catch (err) {
-            listDiv.innerText = "Could not connect to Node server.";
-        }
+        listDiv.innerHTML = "";
+        
+        files.forEach(file => {
+            const div = document.createElement('div');
+            div.className = "file-item";
+            div.innerHTML = `
+                <span>${file.originalName}</span>
+                <div class="btn-group">
+                    <button onclick="copyLink('${file.id}')">Copy Link</button>
+                    <button onclick="decryptFile('${file.id}')" style="background:#27ae60">Decrypt</button>
+                </div>
+            `;
+            listDiv.appendChild(div);
+        });
     }
 
-    async function decryptFile(fileMeta) {
-        const password = prompt(`Enter password for "${fileMeta.originalName}":`);
-        if (!password) return;
+    // --- ACTIONS ---
+    function copyLink(id) {
+        const link = `${window.location.origin}/?id=${id}`;
+        navigator.clipboard.writeText(link);
+        alert("Magic Link Copied: " + link);
+    }
 
+    // Decrypt from Dashboard (Wraps the core logic)
+    async function decryptFile(id) {
+        const res = await fetch(`${SERVER_URL}/api/file/${id}`);
+        const meta = await res.json();
+        const pass = prompt(`Enter password for ${meta.originalName}`);
+        if(pass) coreDecrypt(meta, pass);
+    }
+
+    // Decrypt from Magic Link Page
+    function decryptMagicFile() {
+        const pass = document.getElementById('magicPassword').value;
+        if(pass && magicFileMeta) coreDecrypt(magicFileMeta, pass);
+    }
+
+    // Core Decrypt Logic
+    async function coreDecrypt(meta, password) {
         try {
-            // 1. Download Encrypted Blob
-            const res = await fetch(`${SERVER_URL}/download/${fileMeta.fileName}`);
+            const res = await fetch(`${SERVER_URL}/download/${meta.fileName}`);
             const encryptedBuffer = await res.arrayBuffer();
-
-            // 2. Derive Key
-            const iv = new Uint8Array(JSON.parse(fileMeta.iv));
-            const salt = new Uint8Array(JSON.parse(fileMeta.salt));
+            const iv = new Uint8Array(JSON.parse(meta.iv));
+            const salt = new Uint8Array(JSON.parse(meta.salt));
             const key = await getCryptoKey(password, salt);
-
-            // 3. Decrypt
-            const decryptedData = await window.crypto.subtle.decrypt(
-                { name: "AES-GCM", iv: iv }, key, encryptedBuffer
-            );
-
-            // 4. Save to User's Computer
-            const blob = new Blob([decryptedData]);
+            
+            const decryptedData = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encryptedBuffer);
+            
             const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = fileMeta.originalName.replace(".enc", "");
+            link.href = window.URL.createObjectURL(new Blob([decryptedData]));
+            link.download = meta.originalName.replace(".enc", "");
             link.click();
-        } catch (err) {
-            alert("Decryption Failed! Incorrect Password.");
+        } catch (e) {
+            alert("Wrong Password!");
         }
     }
-
-    loadFiles();
 </script>
 
 </body>

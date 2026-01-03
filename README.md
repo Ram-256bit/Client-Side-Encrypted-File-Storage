@@ -1,7 +1,7 @@
 # Client Side Encrypted File Storage
 
 ### 0. Prerequisite
-Download and install **Node.js** from [nodejs.org](https://nodejs.org/) (https://nodejs.org/dist/v24.12.0/node-v24.12.0-x64.msi).
+Download and install **Node.js** from nodejs.org (https://nodejs.org/dist/v24.12.0/node-v24.12.0-x64.msi).
 
 ### 1. Setup & Run Server
 Open your terminal in the project folder:

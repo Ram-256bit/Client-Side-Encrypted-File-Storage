@@ -10,13 +10,13 @@ Download and install **Node.js** from nodejs.org (https://nodejs.org/dist/v24.12
 ### 2. Setup & Run Server
 Open your terminal in the project folder:
 
+Install dependencies (first time only)
 ```bash
-# Install dependencies (first time only)
 npm install
 ```
 
+Start the server
 ```bash
-# Start the server
 node server.js
 ```
 
